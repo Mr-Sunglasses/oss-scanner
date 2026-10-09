@@ -1,11 +1,9 @@
 # Throwaway: runs tools/check for a Voca project on x86-64. Lives only on the ci-check branch of this fork.
 name: voca-check
+# Push a branch ci/<name> whose ci-input.env sets NAME, REPO (url#branch) and TEST (command run offline in the image).
 on:
-  workflow_dispatch:
-    inputs:
-      name: { description: "project name", required: true }
-      repo: { description: "repo URL with #branch", required: true }
-      test: { description: "command to run in the built image with no network", required: false, default: "true" }
+  push:
+    branches: ["ci/**"]
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -14,13 +12,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Free disk
         run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android /opt/hostedtoolcache/CodeQL && df -h /
-      - run: pip install pyyaml
+      - run: pip install pyyaml && cat ci-input.env >> "$GITHUB_ENV"
       - name: Write project.yaml
         run: |
-          mkdir -p projects/${{ inputs.name }}
-          printf 'repo: %s\nprimary_contact: kanishk@vocahq.com\ndockerfile: .oss-scanner/Dockerfile\nthreat_model: .oss-scanner/threat_model.md\n' '${{ inputs.repo }}' > projects/${{ inputs.name }}/project.yaml
+          mkdir -p projects/$NAME
+          printf 'repo: %s\nprimary_contact: kanishk@vocahq.com\ndockerfile: .oss-scanner/Dockerfile\nthreat_model: .oss-scanner/threat_model.md\n' "$REPO" > projects/$NAME/project.yaml
           python3 tools/validate.py
       - name: Build like the scanner
-        run: python3 tools/check --no-shell ${{ inputs.name }}
+        run: python3 tools/check --no-shell $NAME
       - name: Run tests offline (2 CPU / 8 GB, like a scan agent)
-        run: docker run --rm --network none --cpus 2 --memory 8g -w /src oss-scanner-check/built:${{ inputs.name }} bash -lc '${{ inputs.test }}'
+        run: docker run --rm --network none --cpus 2 --memory 8g -w /src oss-scanner-check/built:$NAME bash -lc "$TEST"
